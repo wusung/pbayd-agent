@@ -13,7 +13,11 @@
 # limitation).
 param(
     [string]$Version,
-    [ValidateSet('gh', 'gh2', 'real')]
+    # No [ValidateSet] here: PowerShell coerces an unbound/$null -Transport to
+    # "" before validating, and "" isn't in the set -- ValidateSet then throws
+    # even when the caller never passed -Transport at all. Blank is the valid
+    # "let Configure-AgentYaml.ps1 pick the default" signal; validate non-blank
+    # values by hand instead (see below).
     [string]$Transport,
     [string]$GhRemote,
     [string]$GhPat,
@@ -27,6 +31,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($Transport -and $Transport -notin @('gh', 'gh2', 'real')) {
+    throw "invalid -Transport '$Transport' (must be gh, gh2, or real)"
+}
 
 $Repo = 'wusung/clipd-agent'
 
