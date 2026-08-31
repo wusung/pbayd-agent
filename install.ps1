@@ -76,4 +76,6 @@ if (-not (Test-Path $tf)) {
 }
 
 Write-Host "clipd-agent $($assets.Tag) written to $dest\clipd-agent"
-Write-Host 'start: powershell -ExecutionPolicy Bypass -File %USERPROFILE%\clipd-agent\Start-ClipdAgent.ps1'
+Write-Host 'start now:        powershell -ExecutionPolicy Bypass -File %USERPROFILE%\clipd-agent\Start-ClipdAgent.ps1'
+Write-Host 'start on login:   powershell -ExecutionPolicy Bypass -File %USERPROFILE%\clipd-agent\clipd-agent.ps1 service --install'
+Write-Host '  (registers a logon-trigger Scheduled Task, no admin rights needed, and starts it once now too)'
