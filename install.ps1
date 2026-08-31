@@ -12,7 +12,18 @@
 # directly (see docs/onelineinstall/spec.md for the air-gapped-downstream
 # limitation).
 param(
-    [string]$Version
+    [string]$Version,
+    [ValidateSet('gh', 'gh2', 'real')]
+    [string]$Transport,
+    [string]$GhRemote,
+    [string]$GhPat,
+    [string]$GhBranch,
+    [string]$Gh2Remote,
+    [string]$Gh2Pat,
+    [string]$Gh2MyBranch,
+    [string]$Gh2PeerBranch,
+    [string]$ExecCmd,
+    [switch]$SkipConfig
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +84,22 @@ if (-not (Test-Path $tf)) {
 } else {
     Write-Host "PRESERVED existing registry\targets.txt:"
     Get-Content $tf | ForEach-Object { Write-Host "  $_" }
+}
+
+# Interactive/non-interactive agent.yaml setup lives in Configure-AgentYaml.ps1,
+# which ships INSIDE the release zip (deploy/make-bootstrap.py FILES list) --
+# not here on main. That keeps this shell rarely-changing (public repo, no
+# PAT/push access needed to fetch it) while prompt logic/defaults/bug fixes
+# ship via ordinary versioned releases. Older releases predating this feature
+# simply won't have the file; skip gracefully rather than failing the install.
+$configScript = "$dest\clipd-agent\deploy\Configure-AgentYaml.ps1"
+if (Test-Path $configScript) {
+    & $configScript -InstallRoot "$dest\clipd-agent" `
+        -Transport $Transport -GhRemote $GhRemote -GhPat $GhPat -GhBranch $GhBranch `
+        -Gh2Remote $Gh2Remote -Gh2Pat $Gh2Pat -Gh2MyBranch $Gh2MyBranch -Gh2PeerBranch $Gh2PeerBranch `
+        -ExecCmd $ExecCmd -SkipConfig:$SkipConfig
+} else {
+    Write-Host 'NOTE: this release predates interactive agent.yaml setup; copy config\agent.yaml.example to config\agent.yaml manually.'
 }
 
 Write-Host "clipd-agent $($assets.Tag) written to $dest\clipd-agent"
