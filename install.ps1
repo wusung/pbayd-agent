@@ -100,12 +100,27 @@ if (-not (Test-Path $tf)) {
 # PAT/push access needed to fetch it) while prompt logic/defaults/bug fixes
 # ship via ordinary versioned releases. Older releases predating this feature
 # simply won't have the file; skip gracefully rather than failing the install.
+#
+# Launched as a child `powershell -File` (not dot-sourced/`&`-invoked in this
+# process): a script FILE on disk is subject to the machine's execution
+# policy (default Restricted), unlike this script's own content, which never
+# touches disk -- it arrived via `irm | iex`. `-ExecutionPolicy Bypass` here
+# scopes to this one child process only, same pattern already used for
+# Start-ClipdAgent.ps1 / clipd-agent.ps1 in DEPLOY.md.
 $configScript = "$dest\clipd-agent\deploy\Configure-AgentYaml.ps1"
 if (Test-Path $configScript) {
-    & $configScript -InstallRoot "$dest\clipd-agent" `
-        -Transport $Transport -GhRemote $GhRemote -GhPat $GhPat -GhBranch $GhBranch `
-        -Gh2Remote $Gh2Remote -Gh2Pat $Gh2Pat -Gh2MyBranch $Gh2MyBranch -Gh2PeerBranch $Gh2PeerBranch `
-        -ExecCmd $ExecCmd -SkipConfig:$SkipConfig
+    $configArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $configScript, '-InstallRoot', "$dest\clipd-agent")
+    if ($Transport) { $configArgs += @('-Transport', $Transport) }
+    if ($GhRemote) { $configArgs += @('-GhRemote', $GhRemote) }
+    if ($GhPat) { $configArgs += @('-GhPat', $GhPat) }
+    if ($GhBranch) { $configArgs += @('-GhBranch', $GhBranch) }
+    if ($Gh2Remote) { $configArgs += @('-Gh2Remote', $Gh2Remote) }
+    if ($Gh2Pat) { $configArgs += @('-Gh2Pat', $Gh2Pat) }
+    if ($Gh2MyBranch) { $configArgs += @('-Gh2MyBranch', $Gh2MyBranch) }
+    if ($Gh2PeerBranch) { $configArgs += @('-Gh2PeerBranch', $Gh2PeerBranch) }
+    if ($ExecCmd) { $configArgs += @('-ExecCmd', $ExecCmd) }
+    if ($SkipConfig) { $configArgs += '-SkipConfig' }
+    & powershell @configArgs
 } else {
     Write-Host 'NOTE: this release predates interactive agent.yaml setup; copy config\agent.yaml.example to config\agent.yaml manually.'
 }
