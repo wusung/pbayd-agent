@@ -1,4 +1,4 @@
-﻿# pbayd-agent one-line installer.
+# pbayd-agent one-line installer.
 #
 #   irm https://raw.githubusercontent.com/wusung/pbayd-agent/main/install.ps1 | iex
 #
