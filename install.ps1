@@ -216,3 +216,29 @@ if (-not $sshdSvc) {
 } else {
     Write-Host 'OpenSSH Server (sshd): installed and running.'
 }
+
+# Offer to register the HTTP tunnel Server Agent right now, as a persistent
+# logon-trigger Scheduled Task (HttpTunnelAgent.ps1 -ServiceAction install --
+# same mechanism pbayd-agent.ps1 service --install uses, see DEPLOY.md).
+# Only when the portal step above actually ran (so a register token exists
+# at HttpTunnelAgent.ps1's default -TokenFile path, v0.3.5) and we're in a
+# real interactive prompt -- same gating as the install-mode menu earlier,
+# never asked under -SkipConfig/non-interactive/-Transport-was-given.
+if ($setupHttpTunnel -and $PortalUrl -and -not $SkipConfig -and -not $nonInteractiveInstall) {
+    $svcDefault = $env:COMPUTERNAME
+    if ([string]::IsNullOrEmpty($svcDefault)) { $svcDefault = [System.Net.Dns]::GetHostName() }
+    Write-Host ''
+    $wantsRegister = Read-Host -Prompt "register this machine as an HTTP tunnel Server Agent now, service name '$svcDefault'? (Y/n)"
+    if ($wantsRegister -notmatch '^(?i)n') {
+        $agentScript = "$dest\pbayd-agent\tools\HttpTunnelAgent.ps1"
+        if (Test-Path $agentScript) {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $agentScript `
+                -ServiceAction install -Service $svcDefault -Transport ws
+        } else {
+            Write-Host 'NOTE: this release predates tools\HttpTunnelAgent.ps1; skipping registration.'
+        }
+    } else {
+        Write-Host "  skipped. Register later with:"
+        Write-Host "    powershell -ExecutionPolicy Bypass -File $dest\pbayd-agent\tools\HttpTunnelAgent.ps1 -ServiceAction install -Service $svcDefault -Transport ws"
+    }
+}
