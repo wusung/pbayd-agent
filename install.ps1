@@ -29,11 +29,21 @@ param(
     [string]$ExecCmd,
     [switch]$SkipConfig,
     # HTTP tunnel self-service token (docs/http-tunnel-portal/spec.md §3.1):
-    # if given, opens a browser to log in against this portal and writes the
-    # issued register/session tokens to registry\portal_*.txt. Optional --
-    # nothing changes when omitted.
-    [string]$PortalUrl
+    # opens a browser to log in against this portal and writes the issued
+    # register/session tokens to registry\portal_*.txt. Defaults to the only
+    # portal this installer actually talks to today, so a plain -SkipConfig
+    # (or any other non-interactive combination) still gets the tunnel step
+    # without having to type the URL out. Pass -PortalUrl '' to opt out
+    # entirely (e.g. an exec-transport-only automated install).
+    [string]$PortalUrl = 'https://patchbay.jetsion.com'
 )
+
+# Whether the caller actually named -PortalUrl (any value, including ''),
+# vs just inheriting the default above -- distinct from `$PortalUrl` being
+# truthy, which the default value makes true even when unspecified. Used
+# below to tell "explicit choice" apart from "no opinion" wherever that
+# distinction changes what gets asked interactively.
+$PortalUrlExplicit = $PSBoundParameters.ContainsKey('PortalUrl')
 
 $ErrorActionPreference = 'Stop'
 
@@ -122,10 +132,20 @@ if (-not (Test-Path $tf)) {
 # happen to be askable independently. Skipped entirely (defaults to mode 3,
 # both) when the caller already committed to non-interactive/-SkipConfig, or
 # already named a -Transport explicitly.
+#
+# $setupHttpTunnel's own default (when no menu/prompt below ends up asking)
+# is "on" -- not "off" -- for a human-run install: PortalUrl's own default
+# already means "yes, use the tunnel" unless told otherwise, so a bare
+# -SkipConfig (or any other combo that skips both prompts below without an
+# explicit -PortalUrl) still gets the tunnel step. The one exception is
+# $nonInteractiveInstall (a -GhPat/-Gh2Pat/PBAYD_GH_PAT automated install):
+# the tunnel step blocks on a human confirming a browser login, which would
+# just hang forever with nobody at the keyboard, so that path defaults off
+# and requires an explicit -PortalUrl to opt in.
 $nonInteractiveInstall = -not [string]::IsNullOrEmpty($GhPat) -or -not [string]::IsNullOrEmpty($Gh2Pat) -or -not [string]::IsNullOrEmpty($env:PBAYD_GH_PAT)
 $setupExecTransport = $true
-$setupHttpTunnel = $false
-if (-not $SkipConfig -and -not $nonInteractiveInstall -and -not $Transport -and -not $PortalUrl) {
+$setupHttpTunnel = -not $nonInteractiveInstall
+if (-not $SkipConfig -and -not $nonInteractiveInstall -and -not $Transport -and -not $PortalUrlExplicit) {
     Write-Host 'install mode:'
     Write-Host '  1) exec-transport only  -- clipboard-bridge exec/put/get (gh/gh2/real)'
     Write-Host '  2) HTTP tunnel only     -- browser-login portal, plain data tunnel'
@@ -136,11 +156,17 @@ if (-not $SkipConfig -and -not $nonInteractiveInstall -and -not $Transport -and 
         '2' { $setupExecTransport = $false; $setupHttpTunnel = $true }
         default { $setupExecTransport = $true; $setupHttpTunnel = $true }
     }
-} elseif (-not $PortalUrl -and -not $SkipConfig -and -not $nonInteractiveInstall) {
+} elseif (-not $PortalUrlExplicit -and -not $SkipConfig -and -not $nonInteractiveInstall) {
     # -Transport was given explicitly but -PortalUrl wasn't: still offer the
     # tunnel half of the mode choice on its own.
-    $wantsPortal = Read-Host -Prompt 'also set up HTTP tunnel via browser login? (y/N)'
-    $setupHttpTunnel = $wantsPortal -match '^(?i)y'
+    $wantsPortal = Read-Host -Prompt 'also set up HTTP tunnel via browser login? (Y/n)'
+    $setupHttpTunnel = $wantsPortal -notmatch '^(?i)n'
+}
+if (-not $setupHttpTunnel -and -not $PortalUrlExplicit) {
+    # Declined via the menu/prompt above, or defaulted off under
+    # $nonInteractiveInstall -- the param default doesn't apply in either
+    # case.
+    $PortalUrl = ''
 }
 
 $configScript = "$dest\pbayd-agent\deploy\Configure-AgentYaml.ps1"
@@ -165,15 +191,11 @@ if (-not $setupExecTransport) {
 
 # HTTP tunnel self-service token request, same "ships inside the zip, run as
 # a child process, skip gracefully if the release predates it" pattern as
-# Configure-AgentYaml.ps1 above. Runs when -PortalUrl was given non-interactively,
-# or when the install-mode menu above selected it -- either way, no further
-# question is asked here; everything else (service name, token issuance)
-# happens via the browser login itself, per Request-PortalToken.ps1's
-# device-flow.
-$defaultPortalUrl = 'https://patchbay.jetsion.com'
-if (-not $PortalUrl -and $setupHttpTunnel) {
-    $PortalUrl = $defaultPortalUrl
-}
+# Configure-AgentYaml.ps1 above. $PortalUrl already reflects the outcome of
+# the default/menu/prompt logic above (its own default, or cleared to ''
+# when declined) -- no further question is asked here; everything else
+# (service name, token issuance) happens via the browser login itself, per
+# Request-PortalToken.ps1's device-flow.
 if ($PortalUrl) {
     $portalScript = "$dest\pbayd-agent\deploy\Request-PortalToken.ps1"
     if (Test-Path $portalScript) {
