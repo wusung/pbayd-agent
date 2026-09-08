@@ -35,7 +35,12 @@ param(
     # (or any other non-interactive combination) still gets the tunnel step
     # without having to type the URL out. Pass -PortalUrl '' to opt out
     # entirely (e.g. an exec-transport-only automated install).
-    [string]$PortalUrl = 'https://patchbay.jetsion.com'
+    [string]$PortalUrl = 'https://patchbay.jetsion.com',
+    # Service name to apply for, passed through to Request-PortalToken.ps1.
+    # Defaults there to the machine name; override when that name is
+    # non-ASCII, when one host fronts several services, or when the machine
+    # name is already held by a live credential (the portal answers 409).
+    [string]$TunnelService
 )
 
 # Whether the caller actually named -PortalUrl (any value, including ''),
@@ -199,8 +204,10 @@ if (-not $setupExecTransport) {
 if ($PortalUrl) {
     $portalScript = "$dest\pbayd-agent\deploy\Request-PortalToken.ps1"
     if (Test-Path $portalScript) {
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $portalScript `
-            -PortalUrl $PortalUrl -InstallRoot "$dest\pbayd-agent"
+        $portalArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $portalScript,
+            '-PortalUrl', $PortalUrl, '-InstallRoot', "$dest\pbayd-agent")
+        if ($TunnelService) { $portalArgs += @('-Service', $TunnelService) }
+        & powershell @portalArgs
     } else {
         Write-Host 'NOTE: this release predates the portal device-flow helper; skipping -PortalUrl.'
     }
