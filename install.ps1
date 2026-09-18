@@ -257,7 +257,7 @@ if ($setupHttpTunnel -and $PortalUrl -and -not $SkipConfig -and -not $nonInterac
     $svcDefault = $env:COMPUTERNAME
     if ([string]::IsNullOrEmpty($svcDefault)) { $svcDefault = [System.Net.Dns]::GetHostName() }
     $agentScript = "$dest\pbayd-agent\tools\HttpTunnelAgent.ps1"
-    $registerCmd = "powershell -ExecutionPolicy Bypass -File $agentScript -ServiceAction install -Service $svcDefault -Transport ws"
+    $registerCmd = "powershell -ExecutionPolicy Bypass -File $agentScript -ServiceAction install -Service $svcDefault -Target 127.0.0.1:22 -Transport wss"
     Write-Host ''
     # The Scheduled Task this registers runs as SYSTEM (HttpTunnelServiceTask.ps1),
     # which needs an elevated (Administrator) token -- unlike pbayd-agent.ps1's own
@@ -275,7 +275,7 @@ if ($setupHttpTunnel -and $PortalUrl -and -not $SkipConfig -and -not $nonInterac
         if ($wantsRegister -notmatch '^(?i)n') {
             if (Test-Path $agentScript) {
                 & powershell -NoProfile -ExecutionPolicy Bypass -File $agentScript `
-                    -ServiceAction install -Service $svcDefault -Transport ws
+                    -ServiceAction install -Service $svcDefault -Target 127.0.0.1:22 -Transport wss
             } else {
                 Write-Host 'NOTE: this release predates tools\HttpTunnelAgent.ps1; skipping registration.'
             }
