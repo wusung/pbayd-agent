@@ -26,6 +26,15 @@ param(
     [string]$Gh2Pat,
     [string]$Gh2MyBranch,
     [string]$Gh2PeerBranch,
+    # onedrive transport: forwarded verbatim to Configure-AgentYaml.ps1. No
+    # secret here -- the refresh token is obtained on this machine afterwards
+    # by tools\OneDrive-Login.ps1 and never passed as an argument.
+    [string]$OnedriveClientId,
+    [string]$OnedriveTenantId,
+    [string]$OnedriveFolder,
+    [string]$OnedriveMyItem,
+    [string]$OnedrivePeerItem,
+    [string]$OnedriveTokenPath,
     [string]$ExecCmd,
     [switch]$SkipConfig,
     # HTTP tunnel self-service token (docs/http-tunnel-portal/spec.md §3.1):
@@ -52,8 +61,8 @@ $PortalUrlExplicit = $PSBoundParameters.ContainsKey('PortalUrl')
 
 $ErrorActionPreference = 'Stop'
 
-if ($Transport -and $Transport -notin @('gh', 'gh2', 'real')) {
-    throw "invalid -Transport '$Transport' (must be gh, gh2, or real)"
+if ($Transport -and $Transport -notin @('gh', 'gh2', 'onedrive', 'real')) {
+    throw "invalid -Transport '$Transport' (must be gh, gh2, onedrive, or real)"
 }
 
 $Repo = 'wusung/pbayd-agent'
@@ -187,6 +196,12 @@ if (-not $setupExecTransport) {
     if ($Gh2Pat) { $configArgs += @('-Gh2Pat', $Gh2Pat) }
     if ($Gh2MyBranch) { $configArgs += @('-Gh2MyBranch', $Gh2MyBranch) }
     if ($Gh2PeerBranch) { $configArgs += @('-Gh2PeerBranch', $Gh2PeerBranch) }
+    if ($OnedriveClientId) { $configArgs += @('-OnedriveClientId', $OnedriveClientId) }
+    if ($OnedriveTenantId) { $configArgs += @('-OnedriveTenantId', $OnedriveTenantId) }
+    if ($OnedriveFolder) { $configArgs += @('-OnedriveFolder', $OnedriveFolder) }
+    if ($OnedriveMyItem) { $configArgs += @('-OnedriveMyItem', $OnedriveMyItem) }
+    if ($OnedrivePeerItem) { $configArgs += @('-OnedrivePeerItem', $OnedrivePeerItem) }
+    if ($OnedriveTokenPath) { $configArgs += @('-OnedriveTokenPath', $OnedriveTokenPath) }
     if ($ExecCmd) { $configArgs += @('-ExecCmd', $ExecCmd) }
     if ($SkipConfig) { $configArgs += '-SkipConfig' }
     & powershell @configArgs
