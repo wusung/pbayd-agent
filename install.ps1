@@ -13,6 +13,10 @@
 # limitation).
 param(
     [string]$Version,
+    # Install from a local pbayd-agent.zip instead of fetching a release, for a
+    # jump host that cannot reach github.com. Copy the zip (and ideally its
+    # .sha256 alongside) onto the host first.
+    [string]$ZipPath,
     # No [ValidateSet] here: PowerShell coerces an unbound/$null -Transport to
     # "" before validating, and "" isn't in the set -- ValidateSet then throws
     # even when the caller never passed -Transport at all. Blank is the valid
@@ -82,19 +86,49 @@ function Get-ReleaseAssetUrls {
     return @{ Tag = $release.tag_name; Zip = $zipAsset.browser_download_url; Sha = $shaAsset.browser_download_url }
 }
 
-$assets = Get-ReleaseAssetUrls -Tag $Version
-Write-Host "pbayd-agent: installing $($assets.Tag)"
+# -ZipPath: install from a zip already sitting on this machine, for a jump host
+# with no route to github.com. Everything after the fetch is identical, so the
+# offline path gets the same integrity check, extraction and config flow rather
+# than a parallel installer that drifts.
+$offline = -not [string]::IsNullOrEmpty($ZipPath)
+if ($offline) {
+    if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
+        throw "-ZipPath not found: $ZipPath"
+    }
+    $ZipPath = (Resolve-Path -LiteralPath $ZipPath).Path
+    Write-Host "pbayd-agent: installing from $ZipPath (offline)"
+} else {
+    $assets = Get-ReleaseAssetUrls -Tag $Version
+    Write-Host "pbayd-agent: installing $($assets.Tag)"
+}
 
 $tmpZip = Join-Path $env:TEMP 'pbayd-agent.zip'
 $tmpSha = Join-Path $env:TEMP 'pbayd-agent.zip.sha256'
 try {
-    Invoke-WebRequest -Uri $assets.Zip -OutFile $tmpZip
-    Invoke-WebRequest -Uri $assets.Sha -OutFile $tmpSha
+    if ($offline) {
+        $tmpZip = $ZipPath
+        # Verify against a .sha256 beside the zip when one was copied over too.
+        # Absent is not fatal (the operator may have carried only the zip), but
+        # it IS said out loud -- a silently unverified package is how a
+        # truncated clipboard/USB copy gets installed and then misdiagnosed.
+        $sideSha = "$ZipPath.sha256"
+        if (Test-Path -LiteralPath $sideSha -PathType Leaf) {
+            $tmpSha = $sideSha
+        } else {
+            Write-Host "NOTE: no $sideSha beside the zip; installing WITHOUT an integrity check." -ForegroundColor Yellow
+            $tmpSha = $null
+        }
+    } else {
+        Invoke-WebRequest -Uri $assets.Zip -OutFile $tmpZip
+        Invoke-WebRequest -Uri $assets.Sha -OutFile $tmpSha
+    }
 
-    $expected = (Get-Content $tmpSha -Raw).Trim().Split(' ')[0].ToLower()
-    $actual = (Get-FileHash -Path $tmpZip -Algorithm SHA256).Hash.ToLower()
-    if ($actual -ne $expected) {
-        throw "sha256 mismatch: expected $expected, got $actual"
+    if ($tmpSha) {
+        $expected = (Get-Content $tmpSha -Raw).Trim().Split(' ')[0].ToLower()
+        $actual = (Get-FileHash -Path $tmpZip -Algorithm SHA256).Hash.ToLower()
+        if ($actual -ne $expected) {
+            throw "sha256 mismatch: expected $expected, got $actual"
+        }
     }
 
     $dest = $env:USERPROFILE
@@ -111,7 +145,12 @@ try {
         $za.Dispose()
     }
 } finally {
-    Remove-Item -Path $tmpZip, $tmpSha -ErrorAction SilentlyContinue
+    # Only the copies THIS script downloaded. In offline mode $tmpZip/$tmpSha
+    # are the operator's own files, handed to us -- deleting them would eat the
+    # package they just carried onto an air-gapped host.
+    if (-not $offline) {
+        Remove-Item -Path $tmpZip, $tmpSha -ErrorAction SilentlyContinue
+    }
 }
 
 $tf = "$dest\pbayd-agent\registry\targets.txt"
